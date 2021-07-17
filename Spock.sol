@@ -2,17 +2,24 @@
 pragma solidity ^0.8.0;
 //import "https://github.com/OpenZeppelin/openzeppelin-contracts/blob/master/contracts/utils/Counters.sol";
 import "@openzeppelin/contracts/utils/Counters.sol";
+import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 	
 contract Spock {
     address owner;
 
+    
     using Counters for Counters.Counter;
     Counters.Counter private _playerIds;
     Counters.Counter private _buyOrderIds;
     Counters.Counter private _sellOrderIds;
+    
+    address _token = 0x0; //Spock token address
+    ERC20 spock = ERC20(_token);
 
     event Buy(uint, uint, uint, address);
     event Sell(uint, uint, uint, address);
+    
+    
 
     struct Player{
         //bytes32 name;
@@ -66,6 +73,14 @@ contract Spock {
         _;
     }
 
+    function buyToken(uint256 amount) public returns (bool) {
+        require(amount > 0, "You can't send 0 tokens");
+        uint256 allowance = spock.allowance(msg.sender, address(this));
+        require(allowance >= amount, "Check the token allowance");
+        spock.transferFrom(msg.sender, address(this), amount);
+        return true;
+    }
+    
     //Store all the player information in the contract
     function addPlayers(uint[] memory playerIds) public onlyOwner returns(bool){
         require(playerIds.length > 0, "Player Id length cannot be zero");
@@ -88,6 +103,7 @@ contract Spock {
             uint totalValue = commission+numStocks*currentPrice;
 
             require(msg.value >= totalValue, "Amount not enough to buy the stocks");
+            require(buyToken(totalValue), "Token transaction failed");
             _buyOrderIds.increment();
 
             uint buyId = 20001 + _buyOrderIds.current();
@@ -144,8 +160,9 @@ contract Spock {
         uint commission = (1 ether* 0.05* numStocks*currentPrice);
         uint totalPayout = payout - commission;
         
-        payable(msg.sender).transfer(totalPayout);
-        payable(owner).transfer(commission);
+        //Need to handle the condition where this contract doesn't have enough money
+        spock.transfer(payable(msg.sender), totalPayout);
+        spock.transfer(payable(owner), commission);
         
         emit Buy(playerId, numStocks, numStocks*currentPrice, msg.sender);
 
